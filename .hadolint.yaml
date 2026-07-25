@@ -1,0 +1,11 @@
+# The build stage is thrown away: the published image is FROM scratch and
+# contains only TimescaleDB's own files. Pinning or cleaning up throwaway
+# build tooling would add upgrade churn without changing what ships.
+ignored:
+  - DL3008 # pin versions in apt-get install
+  - DL3009 # delete apt-get lists after installing
+  # The final stage is FROM scratch and never runs a process, so the build
+  # stage's trailing USER root is not what ends up shipped.
+  - DL3002 # last USER should not be root
+
+failure-threshold: warning

@@ -1,0 +1,130 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so base image security updates ship without a version bump.
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository }}
+  # Kept in sync with the platform assumptions in hack/verify.sh.
+  PLATFORM: linux/amd64
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5 # v3.3.0
+        with:
+          dockerfile: Dockerfile
+
+      - name: Lint shell scripts
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: hack
+
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read build arguments
+        id: args
+        run: |
+          {
+            echo "pg_major=$(sed -n 's/^ARG PG_MAJOR=//p' Dockerfile)"
+            echo "tsdb_version=$(sed -n 's/^ARG TSDB_VERSION=//p' Dockerfile)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      # Exported as a plain directory so the extension can be mounted into a
+      # stock PostgreSQL image the same way CloudNativePG mounts an
+      # ImageVolume. The push below reuses this build's cache.
+      - name: Build extension tree
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: ${{ env.PLATFORM }}
+          outputs: type=local,dest=extension
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify the extension loads in a stock CloudNativePG image
+        run: hack/verify.sh extension
+
+      - name: Log in to ${{ env.REGISTRY }}
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Collect image metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=${{ steps.args.outputs.tsdb_version }}-pg${{ steps.args.outputs.pg_major }}
+            type=raw,value=pg${{ steps.args.outputs.pg_major }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.args.outputs.tsdb_version }}
+
+      # provenance and sbom are left off so the published tag stays a plain
+      # single-manifest image. Provenance is attached separately below as an
+      # OCI referrer, which does not alter the image index that kubelet
+      # resolves for an ImageVolume.
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: ${{ env.PLATFORM }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          provenance: false
+          sbom: false
+
+      - name: Attest build provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Summary
+        if: github.event_name != 'pull_request'
+        run: |
+          {
+            echo "### TimescaleDB ${{ steps.args.outputs.tsdb_version }} for PostgreSQL ${{ steps.args.outputs.pg_major }}"
+            echo
+            echo '```'
+            echo "${{ env.IMAGE }}@${{ steps.push.outputs.digest }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
