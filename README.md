@@ -81,8 +81,11 @@ Pin by digest in production. A tag can be moved; a digest cannot.
 
 ## Tags
 
-`<timescaledb-version>-pg<postgresql-major>`, for example `2.28.3-pg18`, plus a
-rolling `pg18`.
+`<timescaledb-version>-pg<postgresql-major>`, for example `2.28.3-pg18`.
+
+Only immutable tags are published. There is deliberately no rolling `pg18` tag:
+changing a mounted extension image restarts PostgreSQL, so that must never
+happen implicitly.
 
 ## Upgrades
 

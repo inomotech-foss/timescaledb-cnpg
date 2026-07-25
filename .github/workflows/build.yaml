@@ -86,9 +86,10 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE }}
+          # Immutable tags only. A rolling tag would let a cluster's extension
+          # change underneath it, which restarts PostgreSQL.
           tags: |
             type=raw,value=${{ steps.args.outputs.tsdb_version }}-pg${{ steps.args.outputs.pg_major }}
-            type=raw,value=pg${{ steps.args.outputs.pg_major }}
           labels: |
             org.opencontainers.image.version=${{ steps.args.outputs.tsdb_version }}
 
