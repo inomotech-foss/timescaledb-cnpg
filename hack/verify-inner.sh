@@ -6,8 +6,19 @@ set -euo pipefail
 ext=/extensions/timescaledb
 export PGDATA=/tmp/pgdata
 
-test -f "${ext}/share/extension/timescaledb.control"
-test -f "${ext}/lib/timescaledb.so"
+require() {
+    if [ ! -r "$1" ]; then
+        echo "not readable as uid $(id -u): $1" >&2
+        ls -ld "${ext}" "$(dirname "$1")" >&2 || true
+        exit 1
+    fi
+}
+
+require "${ext}/share/extension/timescaledb.control"
+require "${ext}/lib/timescaledb.so"
+
+echo "extension tree: $(find "${ext}/lib" -name '*.so' | wc -l) libraries," \
+     "$(find "${ext}/share/extension" -name '*.sql' | wc -l) SQL scripts"
 
 if compgen -G "/usr/lib/postgresql/*/lib/timescaledb*" > /dev/null; then
     echo "base image already ships timescaledb, so this test would prove nothing" >&2

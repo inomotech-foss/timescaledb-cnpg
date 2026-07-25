@@ -14,6 +14,11 @@ fi
 ext_dir="$(cd "$1" && pwd)"
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 
+# buildx creates its local output directory 0700. PostgreSQL runs as uid 26 in
+# the container below and has to traverse it. Docker Desktop papers over this
+# on macOS, a Linux host does not.
+chmod -R a+rX "${ext_dir}"
+
 arg() { sed -n "s/^ARG $1=//p" "${repo_root}/Dockerfile"; }
 
 base_image="$(arg BASE_IMAGE)"
