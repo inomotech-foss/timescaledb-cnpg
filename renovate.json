@@ -16,12 +16,22 @@
     },
     {
       "customType": "regex",
-      "description": "CloudNativePG base image pinned in the Dockerfile",
-      "managerFilePatterns": ["/^Dockerfile$/"],
+      "description": "CloudNativePG base image pinned in the Dockerfiles",
+      "managerFilePatterns": ["/^Dockerfile$/", "/^toolkit\\.Dockerfile$/"],
       "matchStrings": [
         "ARG BASE_IMAGE=(?<depName>[^:\\s]+):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]+)"
       ],
       "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Newest TimescaleDB Toolkit release in the list pinned in toolkit.Dockerfile. Older entries stay for non-disruptive upgrades and are pruned by hand.",
+      "managerFilePatterns": ["/^toolkit\\.Dockerfile$/"],
+      "matchStrings": [
+        "ARG TOOLKIT_VERSIONS=\"(?:[^\"]*\\s)?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "timescale/timescaledb-toolkit"
     }
   ],
   "packageRules": [
