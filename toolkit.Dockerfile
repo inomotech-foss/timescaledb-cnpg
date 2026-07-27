@@ -17,7 +17,7 @@
 # the last is the tagged version and the only one whose SQL scripts are kept.
 
 ARG PG_MAJOR=18
-ARG TOOLKIT_VERSIONS="1.22.0 1.23.0"
+ARG TOOLKIT_VERSIONS="1.22.0 1.24.0"
 ARG BASE_IMAGE=ghcr.io/cloudnative-pg/postgresql:18-standard-trixie@sha256:4e4ac3fb2c914cfb44f80f0b8be8aa550e83b80bf5220df49c3a8780c1f79bc8
 
 FROM ${BASE_IMAGE} AS build
