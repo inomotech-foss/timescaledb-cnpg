@@ -106,9 +106,9 @@ Pin by digest in production. A tag can be moved; a digest cannot.
 `1.23.0-pg18` for the toolkit. Each tag is a multi-architecture manifest list
 covering `linux/amd64` and `linux/arm64`.
 
-Only immutable tags are published. There is deliberately no rolling `pg18` tag:
-changing a mounted extension image restarts PostgreSQL, so that must never
-happen implicitly.
+Only immutable tags are published. CI never overwrites a tag that already
+exists, and there is deliberately no rolling `pg18` tag: changing a mounted
+extension image restarts PostgreSQL, so that must never happen implicitly.
 
 ## Upgrades
 
