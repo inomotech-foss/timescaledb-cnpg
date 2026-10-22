@@ -18,9 +18,9 @@
 # version, contributes its control file and SQL scripts.
 
 ARG PG_MAJOR=18
-ARG TOOLKIT_MIN_VERSION=1.22.0
-ARG TOOLKIT_VERSION=1.23.0
-ARG BASE_IMAGE=ghcr.io/cloudnative-pg/postgresql:18-standard-trixie@sha256:4e4ac3fb2c914cfb44f80f0b8be8aa550e83b80bf5220df49c3a8780c1f79bc8
+ARG TOOLKIT_MIN_VERSION=1.23.0
+ARG TOOLKIT_VERSION=1.26.0
+ARG BASE_IMAGE=ghcr.io/cloudnative-pg/postgresql:18-standard-trixie@sha256:d72ace96f5803b12c341bb5dac48532e8c1f92f69e8a717a59d779bfc038dea9
 
 FROM ${BASE_IMAGE} AS build
 

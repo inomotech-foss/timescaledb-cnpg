@@ -56,10 +56,10 @@ spec:
     extensions:
       - name: timescaledb
         image:
-          reference: ghcr.io/inomotech-foss/timescaledb-cnpg:2.28.3-pg18
+          reference: ghcr.io/inomotech-foss/timescaledb-cnpg:2.31.0-pg18
       - name: timescaledb_toolkit
         image:
-          reference: ghcr.io/inomotech-foss/timescaledb-cnpg/toolkit:1.23.0-pg18
+          reference: ghcr.io/inomotech-foss/timescaledb-cnpg/toolkit:1.26.0-pg18
   storage:
     size: 100Gi
 ```
@@ -102,8 +102,8 @@ Pin by digest in production. A tag can be moved; a digest cannot.
 
 ## Tags
 
-`<version>-pg<postgresql-major>`, for example `2.28.3-pg18` for TimescaleDB and
-`1.23.0-pg18` for the toolkit. Each tag is a multi-architecture manifest list
+`<version>-pg<postgresql-major>`, for example `2.31.0-pg18` for TimescaleDB and
+`1.26.0-pg18` for the toolkit. Each tag is a multi-architecture manifest list
 covering `linux/amd64` and `linux/arm64`.
 
 Only immutable tags are published. CI never overwrites a tag that already
