@@ -13,17 +13,20 @@
 #
 #   ERROR:  could not access file "timescaledb_toolkit-1.22.0": No such file or directory
 #
-# TOOLKIT_VERSIONS is a list, oldest first. Every entry contributes its library;
-# the last is the tagged version and the only one whose SQL scripts are kept.
+# So the image carries the library of every packaged release from
+# TOOLKIT_MIN_VERSION up to TOOLKIT_VERSION. Only TOOLKIT_VERSION, the tagged
+# version, contributes its control file and SQL scripts.
 
 ARG PG_MAJOR=18
-ARG TOOLKIT_VERSIONS="1.22.0 1.23.0"
+ARG TOOLKIT_MIN_VERSION=1.22.0
+ARG TOOLKIT_VERSION=1.23.0
 ARG BASE_IMAGE=ghcr.io/cloudnative-pg/postgresql:18-standard-trixie@sha256:4e4ac3fb2c914cfb44f80f0b8be8aa550e83b80bf5220df49c3a8780c1f79bc8
 
 FROM ${BASE_IMAGE} AS build
 
 ARG PG_MAJOR
-ARG TOOLKIT_VERSIONS
+ARG TOOLKIT_MIN_VERSION
+ARG TOOLKIT_VERSION
 
 USER root
 SHELL ["/bin/bash", "-eu", "-o", "pipefail", "-c"]
@@ -51,40 +54,43 @@ WORKDIR /tmp/debs
 RUN pkg="timescaledb-toolkit-postgresql-${PG_MAJOR}"; \
     lib="usr/lib/postgresql/${PG_MAJOR}/lib"; \
     share="usr/share/postgresql/${PG_MAJOR}/extension"; \
+    le() { [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n 1)" = "$1" ]; }; \
     mkdir -p /out/lib /out/share/extension; \
-    for v in ${TOOLKIT_VERSIONS}; do \
+    for v in $(apt-cache madison "${pkg}" \
+            | awk '{ c=$3; sub(/^[0-9]+:/, "", c); sub(/~.*/, "", c); print c }' \
+            | sort -uV); do \
+        if ! le "${TOOLKIT_MIN_VERSION}" "${v}" || ! le "${v}" "${TOOLKIT_VERSION}"; then \
+            continue; \
+        fi; \
         ver="$(apt-cache madison "${pkg}" \
             | awk -v p="${v}~" '{ c=$3; sub(/^[0-9]+:/, "", c); if (index(c, p) == 1) { print $3; exit } }')"; \
-        if [ -z "${ver}" ]; then \
-            echo "no ${pkg} build for toolkit ${v}, available:" >&2; \
-            apt-cache madison "${pkg}" >&2; \
-            exit 1; \
-        fi; \
         echo "downloading ${pkg}=${ver}"; \
         rm -rf ./extract ./*.deb; \
         apt-get download "${pkg}=${ver}"; \
         dpkg-deb -x ./*.deb ./extract; \
         cp "./extract/${lib}/timescaledb_toolkit-${v}.so" /out/lib/; \
-        rm -rf /out/share/extension; \
-        mkdir -p /out/share/extension; \
-        cp "./extract/${share}/timescaledb_toolkit.control" /out/share/extension/; \
-        cp "./extract/${share}"/timescaledb_toolkit--*.sql /out/share/extension/; \
+        if [ "${v}" = "${TOOLKIT_VERSION}" ]; then \
+            cp "./extract/${share}/timescaledb_toolkit.control" /out/share/extension/; \
+            cp "./extract/${share}"/timescaledb_toolkit--*.sql /out/share/extension/; \
+        fi; \
     done
 
-RUN set -- ${TOOLKIT_VERSIONS}; \
-    for v in "$@"; do test -f "/out/lib/timescaledb_toolkit-${v}.so"; done; \
-    for v in "$@"; do latest="${v}"; done; \
-    test -f "/out/share/extension/timescaledb_toolkit--${latest}.sql"; \
-    grep -Fqx "default_version = '${latest}'" /out/share/extension/timescaledb_toolkit.control
+RUN for v in "${TOOLKIT_MIN_VERSION}" "${TOOLKIT_VERSION}"; do \
+        test -f "/out/lib/timescaledb_toolkit-${v}.so" || { \
+            echo "no ${v} build of the toolkit was packaged" >&2; exit 1; }; \
+    done; \
+    test -f "/out/share/extension/timescaledb_toolkit--${TOOLKIT_VERSION}.sql"; \
+    grep -Fqx "default_version = '${TOOLKIT_VERSION}'" /out/share/extension/timescaledb_toolkit.control
 
 FROM scratch
 
 ARG PG_MAJOR
-ARG TOOLKIT_VERSIONS
+ARG TOOLKIT_VERSION
 
 LABEL org.opencontainers.image.title="TimescaleDB Toolkit extension for CloudNativePG"
 LABEL org.opencontainers.image.description="TimescaleDB Toolkit for PostgreSQL ${PG_MAJOR}, packaged for CloudNativePG ImageVolume mounts"
 LABEL org.opencontainers.image.licenses="TSL-1.0"
+LABEL org.opencontainers.image.version="${TOOLKIT_VERSION}"
 
 COPY --from=build /out/lib /lib
 COPY --from=build /out/share /share

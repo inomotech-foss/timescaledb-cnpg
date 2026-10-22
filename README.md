@@ -132,11 +132,11 @@ Keeping the older builds makes the upgrade non-disruptive:
 
 The toolkit needs the same care for a different reason. Its package ships only
 one library, named for its version (`timescaledb_toolkit-1.23.0.so`), with no
-unversioned fallback at all. `TOOLKIT_VERSIONS` in `toolkit.Dockerfile` is
-therefore a list, oldest first: every entry contributes its library, and the last
-entry is the version the image is tagged with and the only one whose control file
-and SQL scripts are installed. Keep the version a database is currently on in
-that list until it has been updated.
+unversioned fallback at all. The image therefore carries the library of every
+packaged release from `TOOLKIT_MIN_VERSION` up to `TOOLKIT_VERSION` in
+`toolkit.Dockerfile`. Only `TOOLKIT_VERSION`, the version the image is tagged
+with, contributes its control file and SQL scripts. Raise `TOOLKIT_MIN_VERSION`
+only once no database is on an older version.
 
 Read the [TimescaleDB release notes](https://github.com/timescale/timescaledb/releases)
 and the [toolkit release notes](https://github.com/timescale/timescaledb-toolkit/releases)
@@ -171,7 +171,7 @@ To build a different version:
 
 ```sh
 docker buildx build --build-arg TSDB_VERSION=2.28.2 .
-docker buildx build -f toolkit.Dockerfile --build-arg TOOLKIT_VERSIONS="1.21.0 1.22.0" .
+docker buildx build -f toolkit.Dockerfile --build-arg TOOLKIT_VERSION=1.25.0 .
 ```
 
 The build fails rather than silently drifting if that version has no package

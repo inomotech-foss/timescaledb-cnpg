@@ -25,10 +25,10 @@
     },
     {
       "customType": "regex",
-      "description": "Newest TimescaleDB Toolkit release in the list pinned in toolkit.Dockerfile. Older entries stay for non-disruptive upgrades and are pruned by hand.",
+      "description": "TimescaleDB Toolkit release pinned in toolkit.Dockerfile. TOOLKIT_MIN_VERSION is raised by hand.",
       "managerFilePatterns": ["/^toolkit\\.Dockerfile$/"],
       "matchStrings": [
-        "ARG TOOLKIT_VERSIONS=\"(?:[^\"]*\\s)?(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
+        "ARG TOOLKIT_VERSION=(?<currentValue>\\S+)"
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "timescale/timescaledb-toolkit"

@@ -56,12 +56,10 @@ jobs:
         id: args
         run: |
           set -euo pipefail
-          # TOOLKIT_VERSIONS is oldest-first; the last entry is what the image is.
-          toolkit_versions="$(sed -n 's/^ARG TOOLKIT_VERSIONS=//p' toolkit.Dockerfile | tr -d '"')"
           {
             echo "pg_major=$(sed -n 's/^ARG PG_MAJOR=//p' Dockerfile)"
             echo "tsdb_version=$(sed -n 's/^ARG TSDB_VERSION=//p' Dockerfile)"
-            echo "toolkit_version=${toolkit_versions##* }"
+            echo "toolkit_version=$(sed -n 's/^ARG TOOLKIT_VERSION=//p' toolkit.Dockerfile)"
           } >> "$GITHUB_OUTPUT"
 
   # Native runner per architecture rather than QEMU: an emulated apt install plus
