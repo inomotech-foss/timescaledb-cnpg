@@ -43,6 +43,7 @@ RUN . /etc/os-release; \
         > /etc/apt/sources.list.d/timescaledb.list; \
     apt-get update; \
     pkg="timescaledb-2-postgresql-${PG_MAJOR}"; \
+    loader="timescaledb-2-loader-postgresql-${PG_MAJOR}"; \
     ver="$(apt-cache madison "${pkg}" | awk -v p="${TSDB_VERSION}~" 'index($3, p) == 1 { print $3; exit }')"; \
     if [ -z "${ver}" ]; then \
         echo "no ${pkg} build for TimescaleDB ${TSDB_VERSION}, available:" >&2; \
@@ -50,7 +51,7 @@ RUN . /etc/os-release; \
         exit 1; \
     fi; \
     echo "installing ${pkg}=${ver}"; \
-    apt-get install -y --no-install-recommends "${pkg}=${ver}"
+    apt-get install -y --no-install-recommends "${pkg}=${ver}" "${loader}=${ver}"
 
 RUN lib="/usr/lib/postgresql/${PG_MAJOR}/lib"; \
     share="/usr/share/postgresql/${PG_MAJOR}/extension"; \
