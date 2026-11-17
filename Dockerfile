@@ -19,7 +19,7 @@
 
 ARG PG_MAJOR=18
 ARG TSDB_VERSION=2.31.0
-ARG BASE_IMAGE=ghcr.io/cloudnative-pg/postgresql:18-standard-trixie@sha256:d72ace96f5803b12c341bb5dac48532e8c1f92f69e8a717a59d779bfc038dea9
+ARG BASE_IMAGE=ghcr.io/cloudnative-pg/postgresql:18-standard-trixie@sha256:37fdeea29a4d3ed14570f719488ba55bd21e8975eaea864be5ce74d25a9a13de
 
 FROM ${BASE_IMAGE} AS build
 
