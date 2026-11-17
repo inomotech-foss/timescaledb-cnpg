@@ -8,9 +8,12 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "TimescaleDB release pinned in the Dockerfile",
-      "managerFilePatterns": ["/^Dockerfile$/"],
-      "matchStrings": ["ARG TSDB_VERSION=(?<currentValue>\\S+)"],
+      "description": "TimescaleDB release pinned in the Dockerfile and README example",
+      "managerFilePatterns": ["/^Dockerfile$/", "/^README\\.md$/"],
+      "matchStrings": [
+        "ARG TSDB_VERSION=(?<currentValue>\\S+)",
+        "reference: ghcr\\.io/inomotech-foss/timescaledb-cnpg:(?<currentValue>\\S+)-pg[0-9]+"
+      ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "timescale/timescaledb"
     },
@@ -26,9 +29,10 @@
     {
       "customType": "regex",
       "description": "TimescaleDB Toolkit extension version pinned in toolkit.Dockerfile. GitHub tags may add +pN, which is absent from Debian package contents. TOOLKIT_MIN_VERSION is raised by hand.",
-      "managerFilePatterns": ["/^toolkit\\.Dockerfile$/"],
+      "managerFilePatterns": ["/^toolkit\\.Dockerfile$/", "/^README\\.md$/"],
       "matchStrings": [
-        "ARG TOOLKIT_VERSION=(?<currentValue>\\S+)"
+        "ARG TOOLKIT_VERSION=(?<currentValue>\\S+)",
+        "reference: ghcr\\.io/inomotech-foss/timescaledb-cnpg/toolkit:(?<currentValue>\\S+)-pg[0-9]+"
       ],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "timescale/timescaledb-toolkit",

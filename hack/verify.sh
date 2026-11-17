@@ -38,7 +38,8 @@ fi
 arg() { sed -n "s/^ARG $1=//p" "${repo_root}/Dockerfile"; }
 
 base_image="$(arg BASE_IMAGE)"
-tsdb_version="$(arg TSDB_VERSION)"
+tsdb_version="${VERIFY_TSDB_VERSION:-$(arg TSDB_VERSION)}"
+toolkit_version="${VERIFY_TOOLKIT_VERSION:-$(sed -n 's/^ARG TOOLKIT_VERSION=//p' "${repo_root}/toolkit.Dockerfile")}"
 
 platform="${VERIFY_PLATFORM:-linux/$(docker version --format '{{.Server.Arch}}')}"
 platform_os="${platform%%/*}"
@@ -78,11 +79,21 @@ mounts=(--volume "${ext_dir}:/extensions/timescaledb:ro")
 if [ -n "${toolkit_dir}" ]; then
     mounts+=(--volume "${toolkit_dir}:/extensions/timescaledb_toolkit:ro")
 fi
+if [ -n "${VERIFY_DATA_VOLUME:-}" ]; then
+    mounts+=(--volume "${VERIFY_DATA_VOLUME}:/tmp/pgdata")
+    if [ "${VERIFY_MODE:-fresh}" = upgrade-seed ]; then
+        docker run --rm --platform "${platform}" --user 0 \
+            --volume "${VERIFY_DATA_VOLUME}:/tmp/pgdata" \
+            --entrypoint /bin/chown "${run_image}" 26:26 /tmp/pgdata
+    fi
+fi
 
 exec docker run --rm \
     --platform "${platform}" \
     --user 26 \
     --env "TSDB_VERSION=${tsdb_version}" \
+    --env "TOOLKIT_VERSION=${toolkit_version}" \
+    --env "VERIFY_MODE=${VERIFY_MODE:-fresh}" \
     "${mounts[@]}" \
     --volume "${repo_root}/hack:/hack:ro" \
     --entrypoint /hack/verify-inner.sh \
