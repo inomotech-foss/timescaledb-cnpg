@@ -24,6 +24,22 @@ INSERT INTO metrics
 SELECT now() - (s || ' seconds')::interval, 1, s
 FROM generate_series(1, 600) AS s;
 
+SELECT compress_chunk(c) FROM show_chunks('metrics') AS c;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM timescaledb_information.chunks
+        WHERE hypertable_name = 'metrics' AND is_compressed
+    ) THEN
+        RAISE EXCEPTION 'metrics has no compressed chunks';
+    END IF;
+    IF (SELECT count(*) FROM metrics) IS DISTINCT FROM 600::bigint
+       OR (SELECT sum(value) FROM metrics) IS DISTINCT FROM 180300::double precision THEN
+        RAISE EXCEPTION 'compressed metrics returned unexpected values';
+    END IF;
+END $$;
+
 -- Continuous aggregate and its refresh policy.
 CREATE MATERIALIZED VIEW metrics_1m
     WITH (timescaledb.continuous) AS

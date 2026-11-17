@@ -33,10 +33,10 @@ BEGIN
          - (SELECT km FROM odometer ORDER BY ts      LIMIT 1)
       INTO naive;
 
-    IF resets <> 1 THEN
+    IF resets IS DISTINCT FROM 1::bigint THEN
         RAISE EXCEPTION 'counter_agg detected % resets, expected 1', resets;
     END IF;
-    IF naive >= 0 THEN
+    IF naive IS NULL OR naive >= 0 THEN
         RAISE EXCEPTION 'fixture is wrong: naive last-first is %, expected negative', naive;
     END IF;
     -- 20 accumulated before the reset (100 -> 120), then 15 after it (0 -> 15).
@@ -67,7 +67,7 @@ DECLARE
 BEGIN
     SELECT duration_in(state_agg(ts, state), 'on') INTO on_time FROM ignition;
 
-    IF on_time <> INTERVAL '120 seconds' THEN
+    IF on_time IS DISTINCT FROM INTERVAL '120 seconds' THEN
         RAISE EXCEPTION 'state_agg duration_in(on) is %, expected 120 seconds', on_time;
     END IF;
 
