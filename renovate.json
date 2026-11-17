@@ -25,13 +25,14 @@
     },
     {
       "customType": "regex",
-      "description": "TimescaleDB Toolkit release pinned in toolkit.Dockerfile. TOOLKIT_MIN_VERSION is raised by hand.",
+      "description": "TimescaleDB Toolkit extension version pinned in toolkit.Dockerfile. GitHub tags may add +pN, which is absent from Debian package contents. TOOLKIT_MIN_VERSION is raised by hand.",
       "managerFilePatterns": ["/^toolkit\\.Dockerfile$/"],
       "matchStrings": [
         "ARG TOOLKIT_VERSION=(?<currentValue>\\S+)"
       ],
       "datasourceTemplate": "github-releases",
-      "depNameTemplate": "timescale/timescaledb-toolkit"
+      "depNameTemplate": "timescale/timescaledb-toolkit",
+      "extractVersionTemplate": "^v?(?<version>[0-9]+\\.[0-9]+\\.[0-9]+)(?:\\+p[0-9]+)?$"
     }
   ],
   "packageRules": [

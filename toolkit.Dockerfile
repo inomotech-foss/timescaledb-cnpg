@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+# syntax=docker/dockerfile:1.29.0@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 
 # TimescaleDB Toolkit packaged as a CloudNativePG extension image.
 #
@@ -19,7 +19,8 @@
 
 ARG PG_MAJOR=18
 ARG TOOLKIT_MIN_VERSION=1.23.0
-ARG TOOLKIT_VERSION=1.26.0
+# Extension version used inside the .deb, without GitHub tag suffixes like +p2.
+ARG TOOLKIT_VERSION=1.27.0
 ARG BASE_IMAGE=ghcr.io/cloudnative-pg/postgresql:18-standard-trixie@sha256:37fdeea29a4d3ed14570f719488ba55bd21e8975eaea864be5ce74d25a9a13de
 
 FROM ${BASE_IMAGE} AS build
