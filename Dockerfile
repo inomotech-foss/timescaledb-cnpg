@@ -18,7 +18,7 @@
 # Keeping the older builds turns that into a non-disruptive upgrade.
 
 ARG PG_MAJOR=18
-ARG TSDB_VERSION=2.31.0
+ARG TSDB_VERSION=2.32.0
 ARG BASE_IMAGE=ghcr.io/cloudnative-pg/postgresql:18-standard-trixie@sha256:37fdeea29a4d3ed14570f719488ba55bd21e8975eaea864be5ce74d25a9a13de
 
 FROM ${BASE_IMAGE} AS build
