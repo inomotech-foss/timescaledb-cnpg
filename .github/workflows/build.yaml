@@ -1,0 +1,180 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  plan:
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      has_changes: ${{ steps.matrix.outputs.has_changes }}
+      build: ${{ steps.matrix.outputs.build }}
+      publish: ${{ steps.matrix.outputs.publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Test planning and publishing safeguards
+        run: python3 -m unittest discover -s ci -p 'test_*.py'
+      - name: Select images and resolve tags
+        id: matrix
+        run: python3 ci/plan.py
+
+  lint:
+    needs: plan
+    if: needs.plan.outputs.has_changes == 'true'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Lint Dockerfiles
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: Dockerfile
+          recursive: true
+      - name: Lint shell scripts
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: tests
+      - name: Validate Renovate configuration
+        run: npx --yes --package renovate@44.251.0 -- renovate-config-validator --strict
+
+  build:
+    name: build (${{ matrix.suite }}, ${{ matrix.arch }})
+    needs: [plan, lint]
+    if: needs.plan.outputs.has_changes == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.build) }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGES: ${{ toJSON(matrix.images) }}
+      ARCH: ${{ matrix.arch }}
+      PLATFORM: ${{ matrix.platform }}
+      SUITE: ${{ matrix.suite }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Generate build targets
+        run: python3 ci/bake.py > "$RUNNER_TEMP/bake.json"
+      - name: Build extension trees
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
+        with:
+          source: .
+          files: ${{ runner.temp }}/bake.json
+          targets: build
+      - name: Verify extensions and upgrades
+        run: '"tests/$SUITE/run.sh"'
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push tested images by digest
+        id: push
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
+        with:
+          source: .
+          files: ${{ runner.temp }}/bake.json
+          targets: push
+          provenance: false
+          sbom: false
+      - name: Record digests
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
+        env:
+          METADATA: ${{ steps.push.outputs.metadata }}
+        run: python3 ci/bake.py digests
+      - name: Upload digests
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digests-${{ matrix.suite }}-${{ matrix.arch }}
+          path: digests/*/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: publish (${{ matrix.name }})
+    needs: [plan, build]
+    if: needs.plan.outputs.has_changes == 'true' && github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
+    runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.publish) }}
+    concurrency:
+      group: publish-${{ matrix.image }}-${{ matrix.tag }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      IMAGE: ${{ matrix.image }}
+      NAME: ${{ matrix.name }}
+      TAG: ${{ matrix.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digests-*
+          path: digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check immutable tag
+        id: exists
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 ci/check-tag.py
+      - name: Publish manifest list
+        id: manifest
+        if: steps.exists.outputs.published == 'false'
+        run: |
+          set -euo pipefail
+          refs=()
+          for arch in amd64 arm64; do
+            digest=$(cat "digests/$NAME/$arch")
+            refs+=("$IMAGE@$digest")
+          done
+          docker buildx imagetools create --tag "$IMAGE:$TAG" "${refs[@]}"
+          digest=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{ .Manifest.Digest }}')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Attest build provenance
+        if: steps.exists.outputs.published == 'false'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ matrix.image }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
+      - name: Summary
+        if: steps.exists.outputs.published == 'false'
+        env:
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: |
+          {
+            echo "### $NAME $TAG"
+            echo
+            echo "$IMAGE@$DIGEST"
+          } >> "$GITHUB_STEP_SUMMARY"

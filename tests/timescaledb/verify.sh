@@ -96,5 +96,5 @@ exec docker run --rm \
     --env "VERIFY_MODE=${VERIFY_MODE:-fresh}" \
     "${mounts[@]}" \
     --volume "${repo_root}/tests/timescaledb:/tests:ro" \
-    --entrypoint /tests/timescaledb/verify-inner.sh \
+    --entrypoint /tests/verify-inner.sh \
     "${run_image}"
