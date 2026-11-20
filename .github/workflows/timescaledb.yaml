@@ -1,9 +1,18 @@
-name: build
+name: TimescaleDB extensions
 
 on:
   push:
     branches: [main]
+    paths: &timescaledb-paths
+      - images/timescaledb/**
+      - images/timescaledb-toolkit/**
+      - tests/timescaledb/**
+      - ci/**
+      - .github/workflows/timescaledb.yaml
+      - .hadolint.yaml
+      - renovate.json
   pull_request:
+    paths: *timescaledb-paths
   schedule:
     # Weekly, so a broken upstream package shows up before the next version bump.
     - cron: "23 4 * * 1"
@@ -13,8 +22,9 @@ permissions: {}
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_TIMESCALEDB: ghcr.io/${{ github.repository }}
-  IMAGE_TOOLKIT: ghcr.io/${{ github.repository }}/toolkit
+  # Existing package names must survive a source repository rename.
+  IMAGE_TIMESCALEDB: ghcr.io/inomotech-foss/timescaledb-cnpg
+  IMAGE_TOOLKIT: ghcr.io/inomotech-foss/timescaledb-cnpg/toolkit
 
 jobs:
   lint:
@@ -25,28 +35,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Lint Dockerfile
+      - name: Lint TimescaleDB Dockerfile
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
-          dockerfile: Dockerfile
+          dockerfile: images/timescaledb/Dockerfile
 
-      - name: Lint toolkit.Dockerfile
+      - name: Lint Toolkit Dockerfile
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
-          dockerfile: toolkit.Dockerfile
+          dockerfile: images/timescaledb-toolkit/Dockerfile
 
       - name: Lint shell scripts
         uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
         with:
-          scandir: hack
+          scandir: tests/timescaledb
 
       - name: Validate Renovate configuration
         run: npx --yes --package renovate@44.251.0 -- renovate-config-validator --strict
 
       - name: Check dependency versions and publishing safeguards
         run: |
-          node hack/check-versions.mjs
-          python3 -m unittest discover -s hack -p 'test_*.py'
+          node tests/timescaledb/check-versions.mjs
+          python3 -m unittest discover -s ci -p 'test_*.py'
 
   prepare:
     runs-on: ubuntu-26.04
@@ -65,9 +75,9 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "pg_major=$(sed -n 's/^ARG PG_MAJOR=//p' Dockerfile)"
-            echo "tsdb_version=$(sed -n 's/^ARG TSDB_VERSION=//p' Dockerfile)"
-            echo "toolkit_version=$(sed -n 's/^ARG TOOLKIT_VERSION=//p' toolkit.Dockerfile)"
+            echo "pg_major=$(sed -n 's/^ARG PG_MAJOR=//p' images/timescaledb/Dockerfile)"
+            echo "tsdb_version=$(sed -n 's/^ARG TSDB_VERSION=//p' images/timescaledb/Dockerfile)"
+            echo "toolkit_version=$(sed -n 's/^ARG TOOLKIT_VERSION=//p' images/timescaledb-toolkit/Dockerfile)"
           } >> "$GITHUB_OUTPUT"
 
   # Native runner per architecture rather than QEMU: an emulated apt install plus
@@ -100,8 +110,8 @@ jobs:
       - name: Build TimescaleDB extension tree
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: .
-          file: Dockerfile
+          context: images/timescaledb
+          file: images/timescaledb/Dockerfile
           platforms: ${{ matrix.platform }}
           outputs: type=local,dest=extension
           cache-from: type=gha,scope=timescaledb-${{ matrix.arch }}
@@ -110,30 +120,30 @@ jobs:
       - name: Build toolkit extension tree
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: .
-          file: toolkit.Dockerfile
+          context: images/timescaledb-toolkit
+          file: images/timescaledb-toolkit/Dockerfile
           platforms: ${{ matrix.platform }}
           outputs: type=local,dest=toolkit
           cache-from: type=gha,scope=toolkit-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=toolkit-${{ matrix.arch }}
 
       - name: Verify both extensions load in a stock CloudNativePG image
-        run: hack/verify.sh extension toolkit
+        run: tests/timescaledb/verify.sh extension toolkit
 
       - name: Export previous extension images
         run: |
-          docker buildx build --output type=local,dest=previous/timescaledb -f - . <<'EOF'
+          docker buildx build --output type=local,dest=previous/timescaledb -f - images/timescaledb <<'EOF'
           FROM ghcr.io/inomotech-foss/timescaledb-cnpg:2.31.0-pg18
           EOF
-          docker buildx build --output type=local,dest=previous/toolkit -f - . <<'EOF'
+          docker buildx build --output type=local,dest=previous/toolkit -f - images/timescaledb-toolkit <<'EOF'
           FROM ghcr.io/inomotech-foss/timescaledb-cnpg/toolkit:1.26.0-pg18
           EOF
 
       - name: Verify queries before and after upgrading both extensions
-        run: hack/verify-upgrade.sh extension toolkit previous/timescaledb previous/toolkit
+        run: tests/timescaledb/verify-upgrade.sh extension toolkit previous/timescaledb previous/toolkit
 
       - name: Log in to ${{ env.REGISTRY }}
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ${{ env.REGISTRY }}
@@ -144,11 +154,11 @@ jobs:
       # digests, and attaches provenance to that index instead.
       - name: Push TimescaleDB by digest
         id: push_timescaledb
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: .
-          file: Dockerfile
+          context: images/timescaledb
+          file: images/timescaledb/Dockerfile
           platforms: ${{ matrix.platform }}
           outputs: type=image,name=${{ env.IMAGE_TIMESCALEDB }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=timescaledb-${{ matrix.arch }}
@@ -157,11 +167,11 @@ jobs:
 
       - name: Push toolkit by digest
         id: push_toolkit
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: .
-          file: toolkit.Dockerfile
+          context: images/timescaledb-toolkit
+          file: images/timescaledb-toolkit/Dockerfile
           platforms: ${{ matrix.platform }}
           outputs: type=image,name=${{ env.IMAGE_TOOLKIT }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=toolkit-${{ matrix.arch }}
@@ -169,7 +179,7 @@ jobs:
           sbom: false
 
       - name: Record digests
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
         env:
           ARCH: ${{ matrix.arch }}
           TIMESCALEDB_DIGEST: ${{ steps.push_timescaledb.outputs.digest }}
@@ -181,7 +191,7 @@ jobs:
           echo "${TOOLKIT_DIGEST}"     > "digests/toolkit/${ARCH}"
 
       - name: Upload digests
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: digests-${{ matrix.arch }}
@@ -191,7 +201,7 @@ jobs:
 
   merge:
     needs: [prepare, build]
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
     runs-on: ubuntu-26.04
     concurrency:
       group: publish-${{ matrix.image }}-pg${{ needs.prepare.outputs.pg_major }}
@@ -206,9 +216,9 @@ jobs:
       matrix:
         include:
           - name: timescaledb
-            image: ghcr.io/${{ github.repository }}
+            image: ghcr.io/inomotech-foss/timescaledb-cnpg
           - name: toolkit
-            image: ghcr.io/${{ github.repository }}/toolkit
+            image: ghcr.io/inomotech-foss/timescaledb-cnpg/toolkit
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -248,7 +258,7 @@ jobs:
           IMAGE: ${{ matrix.image }}
           TAG: ${{ steps.version.outputs.value }}-pg${{ needs.prepare.outputs.pg_major }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 hack/check-tag.py
+        run: python3 ci/check-tag.py
 
       - name: Create and push the manifest list
         id: manifest

@@ -9,7 +9,10 @@
     {
       "customType": "regex",
       "description": "TimescaleDB release pinned in the Dockerfile and README example",
-      "managerFilePatterns": ["/^Dockerfile$/", "/^README\\.md$/"],
+      "managerFilePatterns": [
+        "/^images/timescaledb/Dockerfile$/",
+        "/^images/timescaledb/README\\.md$/"
+      ],
       "matchStrings": [
         "ARG TSDB_VERSION=(?<currentValue>\\S+)",
         "reference: ghcr\\.io/inomotech-foss/timescaledb-cnpg:(?<currentValue>\\S+)-pg[0-9]+"
@@ -20,7 +23,10 @@
     {
       "customType": "regex",
       "description": "CloudNativePG base image pinned in the Dockerfiles",
-      "managerFilePatterns": ["/^Dockerfile$/", "/^toolkit\\.Dockerfile$/"],
+      "managerFilePatterns": [
+        "/^images/timescaledb/Dockerfile$/",
+        "/^images/timescaledb-toolkit/Dockerfile$/"
+      ],
       "matchStrings": [
         "ARG BASE_IMAGE=(?<depName>[^:\\s]+):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]+)"
       ],
@@ -28,8 +34,11 @@
     },
     {
       "customType": "regex",
-      "description": "TimescaleDB Toolkit extension version pinned in toolkit.Dockerfile. GitHub tags may add +pN, which is absent from Debian package contents. TOOLKIT_MIN_VERSION is raised by hand.",
-      "managerFilePatterns": ["/^toolkit\\.Dockerfile$/", "/^README\\.md$/"],
+      "description": "TimescaleDB Toolkit extension version pinned in images/timescaledb-toolkit/Dockerfile. GitHub tags may add +pN, which is absent from Debian package contents. TOOLKIT_MIN_VERSION is raised by hand.",
+      "managerFilePatterns": [
+        "/^images/timescaledb-toolkit/Dockerfile$/",
+        "/^images/timescaledb/README\\.md$/"
+      ],
       "matchStrings": [
         "ARG TOOLKIT_VERSION=(?<currentValue>\\S+)",
         "reference: ghcr\\.io/inomotech-foss/timescaledb-cnpg/toolkit:(?<currentValue>\\S+)-pg[0-9]+"
@@ -42,9 +51,15 @@
   "packageRules": [
     {
       "description": "The base image tag encodes the PostgreSQL major, which PG_MAJOR must match, so major bumps are a deliberate change.",
-      "matchDatasources": ["docker"],
-      "matchPackageNames": ["ghcr.io/cloudnative-pg/postgresql"],
-      "matchUpdateTypes": ["major"],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/cloudnative-pg/postgresql"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
       "enabled": false
     }
   ]

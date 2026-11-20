@@ -19,9 +19,9 @@ for (const [tag, expected] of [
   assert.equal(extract.exec(tag)?.groups.version, expected, tag);
 }
 
-const timescaledb = readFileSync('Dockerfile', 'utf8');
-const toolkit = readFileSync('toolkit.Dockerfile', 'utf8');
-const readme = readFileSync('README.md', 'utf8');
+const timescaledb = readFileSync('images/timescaledb/Dockerfile', 'utf8');
+const toolkit = readFileSync('images/timescaledb-toolkit/Dockerfile', 'utf8');
+const readme = readFileSync('images/timescaledb/README.md', 'utf8');
 const arg = (file, name) => {
   const match = file.match(new RegExp(`^ARG ${name}=(\\S+)$`, 'm'));
   assert.ok(match, `missing ${name}`);
@@ -40,7 +40,7 @@ for (const [image, version] of [
     (entry) => entry.depNameTemplate === (image.endsWith('/toolkit')
       ? 'timescale/timescaledb-toolkit' : 'timescale/timescaledb'),
   );
-  assert.ok(dependency.managerFilePatterns.includes('/^README\\.md$/'),
+  assert.ok(dependency.managerFilePatterns.includes('/^images/timescaledb/README\\.md$/'),
     `Renovate must track README for ${image}`);
   const captured = dependency.matchStrings
     .map((pattern) => new RegExp(pattern).exec(readme)?.groups.currentValue)
