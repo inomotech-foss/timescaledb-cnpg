@@ -24,10 +24,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Test planning and publishing safeguards
+      - name: Type-check Python
+        run: |
+          python3 -m venv "$RUNNER_TEMP/typecheck"
+          "$RUNNER_TEMP/typecheck/bin/pip" install -r ci/requirements.txt
+          "$RUNNER_TEMP/typecheck/bin/mypy"
+      - name: Test publishing safeguards
         run: python3 -m unittest discover -s ci -p 'test_*.py'
       - name: Select images and resolve tags
         id: matrix
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: python3 ci/plan.py
 
   lint:
@@ -147,7 +154,7 @@ jobs:
         id: exists
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 ci/check-tag.py
+        run: python3 ci/check_tag.py
       - name: Publish manifest list
         id: manifest
         if: steps.exists.outputs.published == 'false'
