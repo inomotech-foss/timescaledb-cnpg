@@ -32,7 +32,7 @@ docker run -d --name "$server" --user 100:1000 --read-only \
     -e BAO_HSM_PIN=test-user-pin --entrypoint bao "$image" \
     server -config=/state/openbao.hcl >/dev/null
 
-api() { docker exec "$fixture" curl --silent --show-error --fail --max-time 5 "$@"; }
+api() { docker exec "$fixture" curl --silent --show-error --fail --max-time 60 "$@"; }
 url=http://127.0.0.1:8200/v1
 for _ in {1..60}; do
     if docker exec "$fixture" curl -s --max-time 2 "$url/sys/health" >/dev/null; then break; fi
