@@ -4,6 +4,8 @@ set -euo pipefail
 # Override only for local Podman tests; GitHub CI uses Docker.
 docker() { command "${CONTAINER_ENGINE:-docker}" "$@"; }
 extension=$(realpath extension/openbao-tpm)
+# Let the upstream image's non-root UID traverse the local export directory.
+chmod a+rx "$extension"
 tests=$(realpath tests/openbao-tpm)
 fixture="openbao-tpm-fixture-$$"
 server="openbao-tpm-server-$$"
@@ -30,10 +32,10 @@ docker run -d --name "$server" --user 100:1000 --read-only \
     -e BAO_HSM_PIN=test-user-pin --entrypoint bao "$image" \
     server -config=/state/openbao.hcl >/dev/null
 
-api() { docker exec "$fixture" curl --silent --show-error --fail "$@"; }
+api() { docker exec "$fixture" curl --silent --show-error --fail --max-time 5 "$@"; }
 url=http://127.0.0.1:8200/v1
 for _ in {1..60}; do
-    if docker exec "$fixture" curl -s "$url/sys/health" >/dev/null; then break; fi
+    if docker exec "$fixture" curl -s --max-time 2 "$url/sys/health" >/dev/null; then break; fi
     sleep 1
 done
 token=$(api -X PUT -d '{"recovery_shares":3,"recovery_threshold":2}' "$url/sys/init" | jq -er .root_token)

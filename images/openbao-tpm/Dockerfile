@@ -20,7 +20,7 @@ ARG KMS_SHA256
 
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 RUN dnf install -y --setopt=install_weak_deps=False \
-      autoconf-archive automake gcc libtool libyaml-devel make \
+      autoconf-archive automake diffutils gcc libtool libyaml-devel make \
       openssl-devel pkgconf-pkg-config sqlite-devel tar gzip \
     && dnf clean all
 COPY build.sh /build.sh

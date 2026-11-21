@@ -20,7 +20,8 @@ manager=$!
 export TPM2TOOLS_TCTI=tabrmd:bus_type=session
 export TPM2_PKCS11_TCTI=$TPM2TOOLS_TCTI
 for _ in {1..30}; do
-    if tpm2_getcap properties-fixed >/dev/null 2>&1; then break; fi
+    if ! kill -0 "$manager" 2>/dev/null; then cat /state/abrmd.log >&2; exit 1; fi
+    if timeout 2 tpm2_getcap properties-fixed >/dev/null 2>&1; then break; fi
     sleep 1
 done
 tpm2_ptool init --path "$TPM2_PKCS11_STORE"
