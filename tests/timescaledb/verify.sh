@@ -2,14 +2,14 @@
 # Load extension trees into a stock CloudNativePG PostgreSQL image and check
 # that the TimescaleDB Community features work.
 #
-#   docker buildx build -o type=local,dest=extension .
-#   hack/verify.sh extension
+#   docker buildx build -o type=local,dest=extension images/timescaledb
+#   tests/timescaledb/verify.sh extension
 #
 # Optionally verify the toolkit alongside it, which is how the two are meant to
 # be mounted:
 #
-#   docker buildx build -f toolkit.Dockerfile -o type=local,dest=toolkit .
-#   hack/verify.sh extension toolkit
+#   docker buildx build -o type=local,dest=toolkit images/timescaledb-toolkit
+#   tests/timescaledb/verify.sh extension toolkit
 #
 # The trees are architecture-specific and default to the host's. Set
 # VERIFY_PLATFORM to check a tree built for another one, which needs QEMU.
@@ -25,7 +25,7 @@ toolkit_dir=""
 if [ $# -eq 2 ]; then
     toolkit_dir="$(cd "$2" && pwd)"
 fi
-repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 
 # buildx creates its local output directory 0700. PostgreSQL runs as uid 26 in
 # the container below and has to traverse it. Docker Desktop papers over this
@@ -35,11 +35,11 @@ if [ -n "${toolkit_dir}" ]; then
     chmod -R a+rX "${toolkit_dir}"
 fi
 
-arg() { sed -n "s/^ARG $1=//p" "${repo_root}/Dockerfile"; }
+arg() { sed -n "s/^ARG $1=//p" "${repo_root}/images/timescaledb/Dockerfile"; }
 
 base_image="$(arg BASE_IMAGE)"
 tsdb_version="${VERIFY_TSDB_VERSION:-$(arg TSDB_VERSION)}"
-toolkit_version="${VERIFY_TOOLKIT_VERSION:-$(sed -n 's/^ARG TOOLKIT_VERSION=//p' "${repo_root}/toolkit.Dockerfile")}"
+toolkit_version="${VERIFY_TOOLKIT_VERSION:-$(sed -n 's/^ARG TOOLKIT_VERSION=//p' "${repo_root}/images/timescaledb-toolkit/Dockerfile")}"
 
 platform="${VERIFY_PLATFORM:-linux/$(docker version --format '{{.Server.Arch}}')}"
 platform_os="${platform%%/*}"
@@ -95,6 +95,6 @@ exec docker run --rm \
     --env "TOOLKIT_VERSION=${toolkit_version}" \
     --env "VERIFY_MODE=${VERIFY_MODE:-fresh}" \
     "${mounts[@]}" \
-    --volume "${repo_root}/hack:/hack:ro" \
-    --entrypoint /hack/verify-inner.sh \
+    --volume "${repo_root}/tests/timescaledb:/tests:ro" \
+    --entrypoint /tests/verify-inner.sh \
     "${run_image}"

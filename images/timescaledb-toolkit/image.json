@@ -1,0 +1,5 @@
+{
+  "image": "ghcr.io/inomotech-foss/timescaledb-cnpg/toolkit",
+  "tag": "{TOOLKIT_VERSION}-pg{PG_MAJOR}",
+  "suite": "timescaledb"
+}

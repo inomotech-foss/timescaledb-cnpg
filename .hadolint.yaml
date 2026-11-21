@@ -1,5 +1,5 @@
 # The build stage is thrown away: the published image is FROM scratch and
-# contains only TimescaleDB's own files. Pinning or cleaning up throwaway
+# contains only extension files. Pinning or cleaning up throwaway
 # build tooling would add upgrade churn without changing what ships.
 ignored:
   - DL3008 # pin versions in apt-get install

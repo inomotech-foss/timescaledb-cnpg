@@ -5,275 +5,164 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    # Weekly, so a broken upstream package shows up before the next version bump.
     - cron: "23 4 * * 1"
   workflow_dispatch:
 
 permissions: {}
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_TIMESCALEDB: ghcr.io/${{ github.repository }}
-  IMAGE_TOOLKIT: ghcr.io/${{ github.repository }}/toolkit
-
 jobs:
-  lint:
-    runs-on: ubuntu-26.04
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Lint Dockerfile
-        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
-        with:
-          dockerfile: Dockerfile
-
-      - name: Lint toolkit.Dockerfile
-        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
-        with:
-          dockerfile: toolkit.Dockerfile
-
-      - name: Lint shell scripts
-        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
-        with:
-          scandir: hack
-
-      - name: Validate Renovate configuration
-        run: npx --yes --package renovate@44.251.0 -- renovate-config-validator --strict
-
-      - name: Check dependency versions and publishing safeguards
-        run: |
-          node hack/check-versions.mjs
-          python3 -m unittest discover -s hack -p 'test_*.py'
-
-  prepare:
-    runs-on: ubuntu-26.04
+  plan:
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
     permissions:
       contents: read
     outputs:
-      pg_major: ${{ steps.args.outputs.pg_major }}
-      tsdb_version: ${{ steps.args.outputs.tsdb_version }}
-      toolkit_version: ${{ steps.args.outputs.toolkit_version }}
+      has_changes: ${{ steps.matrix.outputs.has_changes }}
+      build: ${{ steps.matrix.outputs.build }}
+      publish: ${{ steps.matrix.outputs.publish }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Test publishing safeguards
+        run: python3 -m unittest discover -s ci -p 'test_*.py'
+      - name: Select images and resolve tags
+        id: matrix
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 ci/plan.py
 
-      - name: Read build arguments
-        id: args
-        run: |
-          set -euo pipefail
-          {
-            echo "pg_major=$(sed -n 's/^ARG PG_MAJOR=//p' Dockerfile)"
-            echo "tsdb_version=$(sed -n 's/^ARG TSDB_VERSION=//p' Dockerfile)"
-            echo "toolkit_version=$(sed -n 's/^ARG TOOLKIT_VERSION=//p' toolkit.Dockerfile)"
-          } >> "$GITHUB_OUTPUT"
+  lint:
+    needs: plan
+    if: needs.plan.outputs.has_changes == 'true'
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Lint Dockerfiles
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: Dockerfile
+          recursive: true
+      - name: Lint shell scripts
+        uses: ludeeus/action-shellcheck@00cae500b08a931fb5698e11e79bfbd38e612a38 # 2.0.0
+        with:
+          scandir: tests
+      - name: Validate Renovate configuration
+        run: npx --yes --package renovate@44.251.0 -- renovate-config-validator --strict
 
-  # Native runner per architecture rather than QEMU: an emulated apt install plus
-  # initdb dominates the workflow.
   build:
-    needs: [prepare, lint]
+    name: build (${{ matrix.suite }}, ${{ matrix.arch }})
+    needs: [plan, lint]
+    if: needs.plan.outputs.has_changes == 'true'
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            arch: amd64
-            runner: ubuntu-26.04
-          - platform: linux/arm64
-            arch: arm64
-            runner: ubuntu-26.04-arm
+      matrix: ${{ fromJSON(needs.plan.outputs.build) }}
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
+    env:
+      IMAGES: ${{ toJSON(matrix.images) }}
+      ARCH: ${{ matrix.arch }}
+      PLATFORM: ${{ matrix.platform }}
+      SUITE: ${{ matrix.suite }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      # Exported as plain directories so the extensions can be mounted the same
-      # way CloudNativePG mounts an ImageVolume. The pushes reuse this cache.
-      - name: Build TimescaleDB extension tree
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Generate build targets
+        run: python3 ci/bake.py > "$RUNNER_TEMP/bake.json"
+      - name: Build extension trees
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         with:
-          context: .
-          file: Dockerfile
-          platforms: ${{ matrix.platform }}
-          outputs: type=local,dest=extension
-          cache-from: type=gha,scope=timescaledb-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=timescaledb-${{ matrix.arch }}
-
-      - name: Build toolkit extension tree
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: toolkit.Dockerfile
-          platforms: ${{ matrix.platform }}
-          outputs: type=local,dest=toolkit
-          cache-from: type=gha,scope=toolkit-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=toolkit-${{ matrix.arch }}
-
-      - name: Verify both extensions load in a stock CloudNativePG image
-        run: hack/verify.sh extension toolkit
-
-      - name: Export previous extension images
-        run: |
-          docker buildx build --output type=local,dest=previous/timescaledb -f - . <<'EOF'
-          FROM ghcr.io/inomotech-foss/timescaledb-cnpg:2.31.0-pg18
-          EOF
-          docker buildx build --output type=local,dest=previous/toolkit -f - . <<'EOF'
-          FROM ghcr.io/inomotech-foss/timescaledb-cnpg/toolkit:1.26.0-pg18
-          EOF
-
-      - name: Verify queries before and after upgrading both extensions
-        run: hack/verify-upgrade.sh extension toolkit previous/timescaledb previous/toolkit
-
-      - name: Log in to ${{ env.REGISTRY }}
-        if: github.event_name != 'pull_request'
+          source: .
+          files: ${{ runner.temp }}/bake.json
+          targets: build
+      - name: Verify extensions and upgrades
+        run: '"tests/$SUITE/run.sh"'
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      # Untagged. The merge job tags the manifest list it assembles from these
-      # digests, and attaches provenance to that index instead.
-      - name: Push TimescaleDB by digest
-        id: push_timescaledb
-        if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      - name: Push tested images by digest
+        id: push
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7.5.0
         with:
-          context: .
-          file: Dockerfile
-          platforms: ${{ matrix.platform }}
-          outputs: type=image,name=${{ env.IMAGE_TIMESCALEDB }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=timescaledb-${{ matrix.arch }}
+          source: .
+          files: ${{ runner.temp }}/bake.json
+          targets: push
           provenance: false
           sbom: false
-
-      - name: Push toolkit by digest
-        id: push_toolkit
-        if: github.event_name != 'pull_request'
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          file: toolkit.Dockerfile
-          platforms: ${{ matrix.platform }}
-          outputs: type=image,name=${{ env.IMAGE_TOOLKIT }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=toolkit-${{ matrix.arch }}
-          provenance: false
-          sbom: false
-
       - name: Record digests
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
         env:
-          ARCH: ${{ matrix.arch }}
-          TIMESCALEDB_DIGEST: ${{ steps.push_timescaledb.outputs.digest }}
-          TOOLKIT_DIGEST: ${{ steps.push_toolkit.outputs.digest }}
-        run: |
-          set -euo pipefail
-          mkdir -p digests/timescaledb digests/toolkit
-          echo "${TIMESCALEDB_DIGEST}" > "digests/timescaledb/${ARCH}"
-          echo "${TOOLKIT_DIGEST}"     > "digests/toolkit/${ARCH}"
-
+          METADATA: ${{ steps.push.outputs.metadata }}
+        run: python3 ci/bake.py digests
       - name: Upload digests
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: digests-${{ matrix.arch }}
+          name: digests-${{ matrix.suite }}-${{ matrix.arch }}
           path: digests/*/*
           if-no-files-found: error
           retention-days: 1
 
-  merge:
-    needs: [prepare, build]
-    if: github.event_name != 'pull_request'
+  publish:
+    name: publish (${{ matrix.name }})
+    needs: [plan, build]
+    if: needs.plan.outputs.has_changes == 'true' && github.event_name != 'pull_request' && github.repository_owner == 'inomotech-foss' && !github.event.repository.fork
     runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.publish) }}
     concurrency:
-      group: publish-${{ matrix.image }}-pg${{ needs.prepare.outputs.pg_major }}
+      group: publish-${{ matrix.image }}-${{ matrix.tag }}
       cancel-in-progress: false
     permissions:
       contents: read
       packages: write
       id-token: write
       attestations: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: timescaledb
-            image: ghcr.io/${{ github.repository }}
-          - name: toolkit
-            image: ghcr.io/${{ github.repository }}/toolkit
+    env:
+      IMAGE: ${{ matrix.image }}
+      NAME: ${{ matrix.name }}
+      TAG: ${{ matrix.tag }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Download digests
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: digests-*
           path: digests
           merge-multiple: true
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Log in to ${{ env.REGISTRY }}
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Resolve version for this image
-        id: version
-        run: |
-          set -euo pipefail
-          case "${{ matrix.name }}" in
-            timescaledb) echo "value=${{ needs.prepare.outputs.tsdb_version }}" >> "$GITHUB_OUTPUT" ;;
-            toolkit)     echo "value=${{ needs.prepare.outputs.toolkit_version }}" >> "$GITHUB_OUTPUT" ;;
-            *) echo "unknown image ${{ matrix.name }}" >&2; exit 1 ;;
-          esac
-
-      # Immutable tags only. A rolling tag would let a cluster's extension change
-      # underneath it, which restarts PostgreSQL.
-      - name: Check whether the tag is already published
+      - name: Check immutable tag
         id: exists
         env:
-          IMAGE: ${{ matrix.image }}
-          TAG: ${{ steps.version.outputs.value }}-pg${{ needs.prepare.outputs.pg_major }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 hack/check-tag.py
-
-      - name: Create and push the manifest list
+        run: python3 ci/check_tag.py
+      - name: Publish manifest list
         id: manifest
         if: steps.exists.outputs.published == 'false'
-        env:
-          IMAGE: ${{ matrix.image }}
-          NAME: ${{ matrix.name }}
-          TAG: ${{ steps.version.outputs.value }}-pg${{ needs.prepare.outputs.pg_major }}
         run: |
           set -euo pipefail
           refs=()
-          for f in "digests/${NAME}"/*; do
-            refs+=("${IMAGE}@$(cat "${f}")")
+          for arch in amd64 arm64; do
+            digest=$(cat "digests/$NAME/$arch")
+            refs+=("$IMAGE@$digest")
           done
-          if [ ${#refs[@]} -eq 0 ]; then
-            echo "no digests found for ${{ matrix.name }}" >&2
-            exit 1
-          fi
-          echo "assembling ${IMAGE}:${TAG} from ${#refs[@]} manifests"
-          docker buildx imagetools create --tag "${IMAGE}:${TAG}" "${refs[@]}"
-          digest="$(docker buildx imagetools inspect "${IMAGE}:${TAG}" \
-            --format '{{ .Manifest.Digest }}')"
-          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
-          docker buildx imagetools inspect "${IMAGE}:${TAG}"
-
+          docker buildx imagetools create --tag "$IMAGE:$TAG" "${refs[@]}"
+          digest=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{ .Manifest.Digest }}')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Attest build provenance
         if: steps.exists.outputs.published == 'false'
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -281,19 +170,13 @@ jobs:
           subject-name: ${{ matrix.image }}
           subject-digest: ${{ steps.manifest.outputs.digest }}
           push-to-registry: true
-
       - name: Summary
         if: steps.exists.outputs.published == 'false'
         env:
-          IMAGE: ${{ matrix.image }}
-          TAG: ${{ steps.version.outputs.value }}-pg${{ needs.prepare.outputs.pg_major }}
           DIGEST: ${{ steps.manifest.outputs.digest }}
         run: |
           {
-            echo "### ${{ matrix.name }} ${TAG}"
+            echo "### $NAME $TAG"
             echo
-            echo '```'
-            echo "${IMAGE}:${TAG}"
-            echo "${IMAGE}@${DIGEST}"
-            echo '```'
+            echo "$IMAGE@$DIGEST"
           } >> "$GITHUB_STEP_SUMMARY"

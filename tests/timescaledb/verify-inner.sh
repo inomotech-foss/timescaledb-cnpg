@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs inside a stock CloudNativePG PostgreSQL image, with the extension tree
 # mounted at /extensions/timescaledb, optionally the toolkit tree at
-# /extensions/timescaledb_toolkit, and this directory at /hack.
+# /extensions/timescaledb_toolkit, and this directory at /tests.
 set -euo pipefail
 : "${TSDB_VERSION:?}" "${TOOLKIT_VERSION:?}"
 
@@ -124,7 +124,7 @@ if [ "${mode}" = upgrade ]; then
             exit 1
         fi
     done
-    sql -f /hack/verify-upgrade-data.sql
+    sql -f /tests/verify-upgrade-data.sql
     # TimescaleDB must be upgraded before any query loads its old library in
     # that session, so ALTER runs first in a new psql process.
     sql -c 'ALTER EXTENSION timescaledb UPDATE;'
@@ -132,7 +132,7 @@ if [ "${mode}" = upgrade ]; then
     assert_version timescaledb "${TSDB_VERSION}"
     assert_version timescaledb_toolkit "${TOOLKIT_VERSION}"
     pg_ctl -D "${PGDATA}" -w restart -l /tmp/postgres.log > /dev/null
-    sql -f /hack/verify-upgrade-data.sql
+    sql -f /tests/verify-upgrade-data.sql
     echo "verified upgrade to TimescaleDB ${TSDB_VERSION} and Toolkit ${TOOLKIT_VERSION}"
     pg_ctl -D "${PGDATA}" -w stop > /dev/null
     exit 0
@@ -144,7 +144,7 @@ if [ "${advertised}" != "${TSDB_VERSION}" ]; then
     exit 1
 fi
 
-sql -f /hack/verify.sql
+sql -f /tests/verify.sql
 
 installed="$(q "SELECT extversion FROM pg_extension WHERE extname = 'timescaledb'")"
 license="$(q "SHOW timescaledb.license")"
@@ -167,7 +167,7 @@ echo
 echo "verified TimescaleDB ${installed}, license=${license}, continuous aggregate rows=${cagg_rows}"
 
 if [ -n "${have_toolkit}" ]; then
-    sql -f /hack/verify-toolkit.sql
+    sql -f /tests/verify-toolkit.sql
     toolkit_version="$(q "SELECT extversion FROM pg_extension WHERE extname = 'timescaledb_toolkit'")"
     toolkit_advertised="$(q "SELECT default_version FROM pg_available_extensions WHERE name = 'timescaledb_toolkit'")"
     if [ "${toolkit_version}" != "${TOOLKIT_VERSION}" ] || [ "${toolkit_advertised}" != "${TOOLKIT_VERSION}" ]; then
