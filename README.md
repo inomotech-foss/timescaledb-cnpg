@@ -6,6 +6,7 @@ OCI artifacts mounted alongside upstream application images with Kubernetes Imag
 | --- | --- | --- |
 | TimescaleDB Community | [images/timescaledb](images/timescaledb) | `ghcr.io/inomotech-foss/timescaledb-cnpg` |
 | TimescaleDB Toolkit | [images/timescaledb-toolkit](images/timescaledb-toolkit) | `ghcr.io/inomotech-foss/timescaledb-cnpg/toolkit` |
+| OpenBao TPM 2.0 | [images/openbao-tpm](images/openbao-tpm) | `ghcr.io/inomotech-foss/extension-images/openbao-tpm` |
 
 [TimescaleDB usage and upgrades](images/timescaledb/README.md).
 

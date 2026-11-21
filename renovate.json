@@ -22,13 +22,15 @@
     },
     {
       "customType": "regex",
-      "description": "CloudNativePG base image pinned in the Dockerfiles",
+      "description": "Base images pinned in Dockerfiles and runtime tests",
       "managerFilePatterns": [
         "/^images/timescaledb/Dockerfile$/",
-        "/^images/timescaledb-toolkit/Dockerfile$/"
+        "/^images/timescaledb-toolkit/Dockerfile$/",
+        "/^images/openbao-tpm/Dockerfile$/",
+        "/^tests/openbao-tpm/run\\.sh$/"
       ],
       "matchStrings": [
-        "ARG BASE_IMAGE=(?<depName>[^:\\s]+):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]+)"
+        "(?:ARG BASE_IMAGE|image)=(?<depName>[^:\\s]+):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]+)"
       ],
       "datasourceTemplate": "docker"
     },
@@ -46,6 +48,33 @@
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "timescale/timescaledb-toolkit",
       "extractVersionTemplate": "^v?(?<version>[0-9]+\\.[0-9]+\\.[0-9]+)(?:\\+p[0-9]+)?$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^images/openbao-tpm/Dockerfile$/", "/^tests/openbao-tpm/Dockerfile$/"],
+      "matchStrings": [
+        "ARG PKCS11_VERSION=(?<currentValue>\\S+)\\s+ARG PKCS11_SHA256=(?<currentDigest>[a-f0-9]+)",
+        "tpm2-pkcs11-tools-(?<currentValue>[0-9.]+)"
+      ],
+      "datasourceTemplate": "github-release-attachments",
+      "depNameTemplate": "tpm2-software/tpm2-pkcs11",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^images/openbao-tpm/Dockerfile$/"],
+      "matchStrings": ["ARG TSS_VERSION=(?<currentValue>\\S+)\\s+ARG TSS_SHA256=(?<currentDigest>[a-f0-9]+)"],
+      "datasourceTemplate": "github-release-attachments",
+      "depNameTemplate": "tpm2-software/tpm2-tss",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^images/openbao-tpm/Dockerfile$/"],
+      "matchStrings": ["ARG KMS_VERSION=(?<currentValue>\\S+)\\s+ARG KMS_SHA256=(?<currentDigest>[a-f0-9]+)"],
+      "datasourceTemplate": "github-release-attachments",
+      "depNameTemplate": "openbao/openbao-plugins",
+      "versioningTemplate": "regex:^kms-pkcs11-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$"
     }
   ],
   "packageRules": [
@@ -60,6 +89,12 @@
       "matchUpdateTypes": [
         "major"
       ],
+      "enabled": false
+    },
+    {
+      "description": "The TPM libraries target UBI 10's glibc ABI; review new UBI majors explicitly.",
+      "matchPackageNames": ["registry.access.redhat.com/ubi10/ubi"],
+      "matchUpdateTypes": ["major"],
       "enabled": false
     }
   ]

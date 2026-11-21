@@ -4,6 +4,7 @@
 ignored:
   - DL3008 # pin versions in apt-get install
   - DL3009 # delete apt-get lists after installing
+  - DL3041 # pin versions in dnf install (build/test tooling)
   # The final stage is FROM scratch and never runs a process, so the build
   # stage's trailing USER root is not what ends up shipped.
   - DL3002 # last USER should not be root

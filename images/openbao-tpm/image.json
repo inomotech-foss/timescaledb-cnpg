@@ -1,0 +1,5 @@
+{
+  "image": "ghcr.io/inomotech-foss/extension-images/openbao-tpm",
+  "tag": "{PKCS11_VERSION}-tss{TSS_VERSION}-{KMS_VERSION}-ubi10-r{REVISION}",
+  "suite": "openbao-tpm"
+}
