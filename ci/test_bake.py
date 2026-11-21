@@ -1,6 +1,6 @@
+import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 
 from bake import record_digests
 from data import JSON
@@ -13,17 +13,29 @@ class DigestTest(unittest.TestCase):
             with TemporaryDirectory() as directory:
                 output = Path(directory) / "digests"
                 with self.assertRaises((KeyError, ValueError)):
-                    record_digests(["one", "two"], "amd64", {
-                        "push-one": {"containerimage.digest": "sha256:" + "a" * 64},
-                        "push-two": bad,
-                    }, output)
+                    record_digests(
+                        ["one", "two"],
+                        "amd64",
+                        {
+                            "push-one": {"containerimage.digest": "sha256:" + "a" * 64},
+                            "push-two": bad,
+                        },
+                        output,
+                    )
                 self.assertFalse(output.exists())
 
     def test_architecture_digests_are_kept_separate(self) -> None:
         with TemporaryDirectory() as directory:
             output = Path(directory)
             for arch, value in [("amd64", "a"), ("arm64", "b")]:
-                record_digests(["one"], arch, {
-                    "push-one": {"containerimage.digest": "sha256:" + value * 64},
-                }, output)
-            self.assertNotEqual((output / "one/amd64").read_text(), (output / "one/arm64").read_text())
+                record_digests(
+                    ["one"],
+                    arch,
+                    {
+                        "push-one": {"containerimage.digest": "sha256:" + value * 64},
+                    },
+                    output,
+                )
+            self.assertNotEqual(
+                (output / "one/amd64").read_text(), (output / "one/arm64").read_text()
+            )

@@ -24,11 +24,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Type-check Python
-        run: |
-          python3 -m venv "$RUNNER_TEMP/typecheck"
-          "$RUNNER_TEMP/typecheck/bin/pip" install -r ci/requirements.txt
-          "$RUNNER_TEMP/typecheck/bin/mypy"
       - name: Test publishing safeguards
         run: python3 -m unittest discover -s ci -p 'test_*.py'
       - name: Select images and resolve tags

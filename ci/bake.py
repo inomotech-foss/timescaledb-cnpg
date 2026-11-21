@@ -2,12 +2,12 @@
 
 import json
 import os
-from pathlib import Path
 import re
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
-from data import Image, JSON, image_list, object_value, parse_json, string_value
+from data import JSON, Image, image_list, object_value, parse_json, string_value
 
 
 def definition(images: Sequence[Image], arch: str, platform: str) -> dict[str, object]:
@@ -25,20 +25,33 @@ def definition(images: Sequence[Image], arch: str, platform: str) -> dict[str, o
         }
         targets[f"push-{name}"] = {
             "inherits": [f"build-{name}"],
-            "output": [f"type=image,name={image['image']},push-by-digest=true,name-canonical=true,push=true"],
+            "output": [
+                f"type=image,name={image['image']},push-by-digest=true,name-canonical=true,push=true"
+            ],
         }
-    return {"group": {
-        "build": {"targets": [f"build-{image['name']}" for image in images]},
-        "push": {"targets": [f"push-{image['name']}" for image in images]},
-    }, "target": targets}
+    return {
+        "group": {
+            "build": {"targets": [f"build-{image['name']}" for image in images]},
+            "push": {"targets": [f"push-{image['name']}" for image in images]},
+        },
+        "target": targets,
+    }
 
 
-def record_digests(names: Sequence[str], arch: str, metadata: JSON, destination: Path) -> None:
+def record_digests(
+    names: Sequence[str], arch: str, metadata: JSON, destination: Path
+) -> None:
     # Validate all targets before writing any files consumed by publication.
     records = object_value(metadata)
-    digests = {name: string_value(object_value(records[f"push-{name}"])["containerimage.digest"])
-               for name in names}
-    if not all(re.fullmatch(r"sha256:[0-9a-f]{64}", digest) for digest in digests.values()):
+    digests = {
+        name: string_value(
+            object_value(records[f"push-{name}"])["containerimage.digest"]
+        )
+        for name in names
+    }
+    if not all(
+        re.fullmatch(r"sha256:[0-9a-f]{64}", digest) for digest in digests.values()
+    ):
         raise ValueError("invalid pushed image digest")
     for name, digest in digests.items():
         path = destination / name / arch
@@ -50,7 +63,11 @@ if __name__ == "__main__":
     images = image_list(os.environ["IMAGES"])
     arch = os.environ["ARCH"]
     if sys.argv[1:] == ["digests"]:
-        record_digests([image["name"] for image in images], arch,
-                       parse_json(os.environ["METADATA"]), Path("digests"))
+        record_digests(
+            [image["name"] for image in images],
+            arch,
+            parse_json(os.environ["METADATA"]),
+            Path("digests"),
+        )
     else:
         print(json.dumps(definition(images, arch, os.environ["PLATFORM"]), indent=2))

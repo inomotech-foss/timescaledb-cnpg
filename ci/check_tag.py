@@ -2,11 +2,11 @@
 
 import base64
 import os
-from http.client import HTTPResponse
-from typing import cast
 import urllib.error
 import urllib.parse
 import urllib.request
+from http.client import HTTPResponse
+from typing import cast
 
 from data import object_value, parse_json, string_value
 
@@ -24,7 +24,9 @@ def tag_exists(image: str, tag: str, actor: str, password: str) -> bool:
         headers={"Authorization": f"Basic {credentials}"},
     )
     with cast(HTTPResponse, urllib.request.urlopen(request, timeout=30)) as response:
-        token = string_value(object_value(parse_json(response.read().decode()))["token"])
+        token = string_value(
+            object_value(parse_json(response.read().decode()))["token"]
+        )
     request = urllib.request.Request(
         f"https://ghcr.io/v2/{repository}/manifests/{urllib.parse.quote(tag, safe='')}",
         headers={
@@ -40,7 +42,9 @@ def tag_exists(image: str, tag: str, actor: str, password: str) -> bool:
         },
     )
     try:
-        with cast(HTTPResponse, urllib.request.urlopen(request, timeout=30)) as response:
+        with cast(
+            HTTPResponse, urllib.request.urlopen(request, timeout=30)
+        ) as response:
             if response.status != 200:
                 raise RuntimeError(f"unexpected registry status: {response.status}")
             return True
@@ -48,8 +52,12 @@ def tag_exists(image: str, tag: str, actor: str, password: str) -> bool:
         if error.code != 404:
             raise
         errors = object_value(parse_json(error.read().decode())).get("errors")
-        if not isinstance(errors, list) or not errors or any(
-            object_value(item).get("code") != "MANIFEST_UNKNOWN" for item in errors
+        if (
+            not isinstance(errors, list)
+            or not errors
+            or any(
+                object_value(item).get("code") != "MANIFEST_UNKNOWN" for item in errors
+            )
         ):
             raise
         return False
@@ -57,7 +65,9 @@ def tag_exists(image: str, tag: str, actor: str, password: str) -> bool:
 
 if __name__ == "__main__":
     image, tag = os.environ["IMAGE"], os.environ["TAG"]
-    exists = tag_exists(image, tag, os.environ["GITHUB_ACTOR"], os.environ["GITHUB_TOKEN"])
+    exists = tag_exists(
+        image, tag, os.environ["GITHUB_ACTOR"], os.environ["GITHUB_TOKEN"]
+    )
     print(f"{image}:{tag}: {'already published' if exists else 'not published'}")
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
         output.write(f"published={str(exists).lower()}\n")

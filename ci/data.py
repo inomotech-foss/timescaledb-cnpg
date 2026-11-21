@@ -37,8 +37,12 @@ def image_list(text: str) -> list[Image]:
     result: list[Image] = []
     for value in values:
         record = object_value(value)
-        result.append(Image(
-            name=string_value(record["name"]), suite=string_value(record["suite"]),
-            image=string_value(record["image"]), tag=string_value(record["tag"]),
-        ))
+        result.append(
+            Image(
+                name=string_value(record["name"]),
+                suite=string_value(record["suite"]),
+                image=string_value(record["image"]),
+                tag=string_value(record["tag"]),
+            )
+        )
     return result

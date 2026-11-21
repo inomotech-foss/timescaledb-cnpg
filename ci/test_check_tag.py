@@ -1,9 +1,9 @@
-from email.message import Message
 import io
 import json
 import unittest
 import urllib.error
 import urllib.request
+from email.message import Message
 from unittest.mock import patch
 
 import check_tag
@@ -27,13 +27,18 @@ def http_error(status: int, code: str) -> urllib.error.HTTPError:
 
 class CheckTagTest(unittest.TestCase):
     def check(self, result: Response | urllib.error.URLError) -> bool:
-        responses: list[Response | urllib.error.URLError] = [Response(b'{"token":"test-token"}'), result]
+        responses: list[Response | urllib.error.URLError] = [
+            Response(b'{"token":"test-token"}'),
+            result,
+        ]
         with patch.object(
             urllib.request,
             "urlopen",
             side_effect=responses,
         ):
-            return check_tag.tag_exists("ghcr.io/example/image", "1.0.0-pg18", "actor", "secret")
+            return check_tag.tag_exists(
+                "ghcr.io/example/image", "1.0.0-pg18", "actor", "secret"
+            )
 
     def test_existing_tag(self) -> None:
         self.assertTrue(self.check(Response(b"{}")))
@@ -42,8 +47,13 @@ class CheckTagTest(unittest.TestCase):
         self.assertFalse(self.check(http_error(404, "MANIFEST_UNKNOWN")))
 
     def test_registry_failures_do_not_allow_publishing(self) -> None:
-        for status, code in [(401, "UNAUTHORIZED"), (403, "DENIED"), (404, "NAME_UNKNOWN"),
-                             (429, "TOOMANYREQUESTS"), (500, "UNKNOWN")]:
+        for status, code in [
+            (401, "UNAUTHORIZED"),
+            (403, "DENIED"),
+            (404, "NAME_UNKNOWN"),
+            (429, "TOOMANYREQUESTS"),
+            (500, "UNKNOWN"),
+        ]:
             with self.subTest(status=status, code=code):
                 with self.assertRaises(urllib.error.HTTPError):
                     self.check(http_error(status, code))
@@ -53,6 +63,10 @@ class CheckTagTest(unittest.TestCase):
             self.check(urllib.error.URLError("connection reset"))
 
     def test_token_failure_does_not_allow_publishing(self) -> None:
-        with patch.object(urllib.request, "urlopen", side_effect=http_error(403, "DENIED")):
+        with patch.object(
+            urllib.request, "urlopen", side_effect=http_error(403, "DENIED")
+        ):
             with self.assertRaises(urllib.error.HTTPError):
-                check_tag.tag_exists("ghcr.io/example/image", "1.0.0-pg18", "actor", "secret")
+                check_tag.tag_exists(
+                    "ghcr.io/example/image", "1.0.0-pg18", "actor", "secret"
+                )
